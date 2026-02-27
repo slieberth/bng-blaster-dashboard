@@ -1,0 +1,9 @@
+httpx
+netaddr
+pytest
+pytest-html
+pytest-cov
+redis
+reflex
+pyyaml
+reflex-monaco

@@ -1,0 +1,32 @@
+curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe/_command' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "command": "session-info",
+    "arguments": {
+        "session-id": 1
+    }
+}'
+
+
+curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe/_command' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "command": "session-counters",
+    "arguments": {}
+}'
+
+curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe_100/_command' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "command": "interfaces",
+    "arguments": {}
+}'
+
+
+
+curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe_100/_command' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "command": "test-info",
+    "arguments": {}
+}'

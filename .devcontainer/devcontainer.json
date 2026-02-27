@@ -1,0 +1,37 @@
+{
+  "name": "bng blaster dashboard devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+      },
+      "extensions": ["ms-python.python"]
+    }
+  },
+  "forwardPorts": [5712, 5713, 5711],
+  "portsAttributes": {
+    "5712": { "label": "Reflex Frontend" },
+    "5713": { "label": "Reflex Backend" },
+    "5711": { "label": "bngblasterctrl API" }
+  },
+  "mounts": [
+    "source=devcontainer-bash-history,target=/commandhistory,type=volume"
+  ],
+  "containerEnv": {
+    "HISTFILE": "/commandhistory/.bash_history"
+  },
+
+  "capAdd": ["NET_ADMIN"],
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--sysctl=net.ipv6.conf.all.disable_ipv6=1",
+    "--sysctl=net.ipv6.conf.default.disable_ipv6=1",
+    "--privileged"
+  ]
+}
