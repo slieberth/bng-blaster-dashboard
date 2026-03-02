@@ -1,4 +1,4 @@
-curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe/_command' \
+curl --location --request POST 'http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe/_command' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "command": "session-info",
@@ -8,14 +8,39 @@ curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstar
 }'
 
 
-curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe/_command' \
+curl --location --request PUT 'http://127.0.0.1:5711//api/v1/instances/quickstart_pppoe' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "interfaces": {
+        "a10nsp": [
+            {
+                "__comment__": "PPPoE Server",
+                "interface": "veth1.1"
+            }
+        ],
+        "access": [
+            {
+                "__comment__": "PPPoE Client",
+                "interface": "veth1.2",
+                "type": "pppoe",
+                "outer-vlan-min": 1,
+                "outer-vlan-max": 4000,
+                "inner-vlan": 7
+            }
+        ]
+    }
+}'
+
+
+
+curl --location --request POST 'http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe/_command' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "command": "session-counters",
     "arguments": {}
 }'
 
-curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe_100/_command' \
+curl --location --request POST 'http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe_100/_command' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "command": "interfaces",
@@ -24,7 +49,7 @@ curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstar
 
 
 
-curl --location --request POST 'http://127.0.0.1:4711/api/v1/instances/quickstart_pppoe_100/_command' \
+curl --location --request POST 'http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe_100/_command' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "command": "test-info",

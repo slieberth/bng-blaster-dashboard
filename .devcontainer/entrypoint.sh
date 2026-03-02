@@ -116,5 +116,35 @@ trap term_handler SIGTERM SIGINT
 # ------------------------------------------------------------
 # Keep container alive (and forward signals)
 # ------------------------------------------------------------
+
+curl -v \
+  -X PUT \
+  "http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe" \
+  -H "Content-Type: application/json" \
+  --data-binary @- <<'JSON'
+{
+  "interfaces": {
+    "a10nsp": [
+      {
+        "__comment__": "PPPoE Server",
+        "interface": "veth1.1"
+      }
+    ],
+    "access": [
+      {
+        "__comment__": "PPPoE Client",
+        "interface": "veth1.2",
+        "type": "pppoe",
+        "outer-vlan-min": 1,
+        "outer-vlan-max": 4000,
+        "inner-vlan": 7
+      }
+    ]
+  }
+}
+JSON
+
+
+  
 sleep infinity &
 wait $!
