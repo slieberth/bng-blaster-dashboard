@@ -106,11 +106,11 @@ class KeyValueStore:
     def key_instance_meta(self, instance_name: str) -> str:
         return self._k(f"instance:{instance_name}:meta")
 
-    def key_session_summary(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:session_summary")
+    def key_session_counters(self, instance_name: str) -> str:
+        return self._k(f"instance:{instance_name}:session_counters")
 
-    def key_stream_summary(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:stream_summary")
+    def key_stream_stats(self, instance_name: str) -> str:
+        return self._k(f"instance:{instance_name}:stream_stats")
 
     # ----------------------------
     # Instance Meta (HASH)
@@ -143,20 +143,20 @@ class KeyValueStore:
     # ----------------------------
     # Summaries with TTL (separate keys)
     # ----------------------------
-    def set_session_summary(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
-        key = self.key_session_summary(instance_name)
+    def set_session_counters(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
+        key = self.key_session_counters(instance_name)
         self._redis.set(key, json.dumps(summary, ensure_ascii=False), ex=int(ex or self._summaries_ttl))
 
-    def get_session_summary(self, instance_name: str) -> Optional[dict[str, Any]]:
-        raw = self._redis.get(self.key_session_summary(instance_name))
+    def get_session_counters(self, instance_name: str) -> Optional[dict[str, Any]]:
+        raw = self._redis.get(self.key_session_counters(instance_name))
         return json.loads(raw) if raw else None
 
-    def set_stream_summary(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
-        key = self.key_stream_summary(instance_name)
+    def set_stream_stats(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
+        key = self.key_stream_stats(instance_name)
         self._redis.set(key, json.dumps(summary, ensure_ascii=False), ex=int(ex or self._summaries_ttl))
 
-    def get_stream_summary(self, instance_name: str) -> Optional[dict[str, Any]]:
-        raw = self._redis.get(self.key_stream_summary(instance_name))
+    def get_stream_stats(self, instance_name: str) -> Optional[dict[str, Any]]:
+        raw = self._redis.get(self.key_stream_stats(instance_name))
         return json.loads(raw) if raw else None
 
     # ----------------------------

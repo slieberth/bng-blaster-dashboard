@@ -32,8 +32,8 @@ class InstanceMeta:
     config_json_str: Optional[str] = None
     startup_params: Optional[Dict[str, Any]] = None
 
-    session_summary: Optional[Dict[str, Any]] = None
-    stream_summary: Optional[Dict[str, Any]] = None
+    session_counters: Optional[Dict[str, Any]] = None
+    stream_stats: Optional[Dict[str, Any]] = None
 
     last_seen_ts: Optional[int] = None
 

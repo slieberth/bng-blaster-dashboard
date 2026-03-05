@@ -56,10 +56,10 @@ def test_atomic_patch(store, instance_name):
 
 
 def test_summary_ttl(store, instance_name):
-    store.set_session_summary(instance_name, {"sessions": 1}, ex=1)
+    store.set_session_counters(instance_name, {"sessions": 1}, ex=1)
 
-    assert store.get_session_summary(instance_name) == {"sessions": 1}
+    assert store.get_session_counters(instance_name) == {"sessions": 1}
 
     time.sleep(1.2)
 
-    assert store.get_session_summary(instance_name) is None
+    assert store.get_session_counters(instance_name) is None

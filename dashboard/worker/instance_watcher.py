@@ -85,13 +85,13 @@ async def run_forever(stop_event: asyncio.Event) -> None:
                 # If started: try to fetch summaries via run_report.json
                 if status_enum == InstanceStatus.STARTED:
                     try:
-                        session_summary = await client.instance_command_with_retries(
+                        session_counters = await client.instance_command_with_retries(
                             name,
                             "session-counters",
                             {})
-                        # logger.info("!!! instance=%s session_summary=%s", name, session_summary)
-                        counters = SessionCounters.model_validate(session_summary["session-counters"])
-                        store.set_session_summary(
+                        # logger.info("!!! instance=%s session_counters=%s", name, session_counters)
+                        counters = SessionCounters.model_validate(session_counters["session-counters"])
+                        store.set_session_counters(
                             name,
                             counters.model_dump(),
                             ex=summaries_ttl,
@@ -105,7 +105,7 @@ async def run_forever(stop_event: asyncio.Event) -> None:
                             {})
                         logger.info("!!! instance=%s stream_stats=%s", name, stream_stats)
                         counters = StreamStats.model_validate(stream_stats["stream-stats"])
-                        store.set_stream_summary(
+                        store.set_stream_stats(
                             name,
                             counters.model_dump(),
                             ex=summaries_ttl,
