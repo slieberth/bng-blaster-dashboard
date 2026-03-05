@@ -1,27 +1,27 @@
-# wui/lib/key_value_store.py
+# dashboard/services/key_value_store.py
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Optional, Dict
 
 import redis
-from pydantic import BaseModel
+from pydantic import TypeAdapter
 
-T = TypeVar("T", bound=BaseModel)
+from dashboard.models.bbl_models import InstanceMeta
 
 
 @dataclass(frozen=True)
 class StoreConfig:
-    """Configuration for a Redis/Valkey connection."""
     host: str = "localhost"
     port: int = 6379
     db: int = 0
     password: Optional[str] = None
     ssl: bool = False
     decode_responses: bool = True
-    prefix: str = "bbl-wui"
+    prefix: str = "bbl-db"
+    summaries_ttl_sec: int = 60
 
 
 def _env_bool(value: Optional[str], default: bool = False) -> bool:
@@ -30,29 +30,15 @@ def _env_bool(value: Optional[str], default: bool = False) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "on")
 
 
-def make_store_from_env(prefix: str = "bbl-wui") -> "KeyValueStore":
-    """
-    Create store from environment variables.
-
-    Supported env vars (with prefix):
-      - {PREFIX}_REDIS_HOST
-      - {PREFIX}_REDIS_PORT
-      - {PREFIX}_REDIS_DB
-      - {PREFIX}_REDIS_PASSWORD
-      - {PREFIX}_REDIS_SSL
-      - {PREFIX}_REDIS_URL   (optional, overrides host/port/db/password/ssl)
-
-    Example:
-      BBL_WUI_REDIS_HOST=localhost
-      BBL_WUI_REDIS_PORT=6379
-      BBL_WUI_REDIS_DB=0
-    """
+def make_store_from_env(prefix: str = "bbl-db") -> "KeyValueStore":
     p = prefix.upper().replace("-", "_")
 
     url = os.getenv(f"{p}_REDIS_URL")
+    ttl = int(os.getenv(f"{p}_REDIS_SUMMARIES_TTL_SEC", "60"))
+
     if url:
         client = redis.Redis.from_url(url, decode_responses=True)
-        return KeyValueStore(client=client, prefix=prefix)
+        return KeyValueStore(client=client, prefix=prefix, summaries_ttl_sec=ttl)
 
     host = os.getenv(f"{p}_REDIS_HOST", "localhost")
     port = int(os.getenv(f"{p}_REDIS_PORT", "6379"))
@@ -68,22 +54,36 @@ def make_store_from_env(prefix: str = "bbl-wui") -> "KeyValueStore":
         ssl=ssl,
         decode_responses=True,
         prefix=prefix,
+        summaries_ttl_sec=ttl,
     )
     return KeyValueStore.from_config(cfg)
 
 
 class KeyValueStore:
-    """
-    Thin wrapper around Redis/Valkey with:
-      - namespaced keys (prefix)
-      - JSON dict helpers
-      - typed Pydantic helpers (save_model/load_model)
-      - domain helpers for your instance keys
+    # Atomic hash patch (HSET + HDEL) via Lua
+    _LUA_HPATCH = """
+    local patch = cjson.decode(ARGV[1])
+    local dels = cjson.decode(ARGV[2])
+
+    for k, v in pairs(patch) do
+        redis.call('HSET', KEYS[1], k, v)
+    end
+    for i, k in ipairs(dels) do
+        redis.call('HDEL', KEYS[1], k)
+    end
+    return 1
     """
 
-    def __init__(self, client: redis.Redis, prefix: str = "bbl-wui"):
+    _JSON_FIELDS = {"startup_params"}  # summaries will be separate keys with TTL
+    _INT_FIELDS = {"created_ts", "started_ts", "stopped_ts", "last_seen_ts"}
+
+    def __init__(self, client: redis.Redis, prefix: str = "bbl-db", *, summaries_ttl_sec: int = 60):
         self._redis = client
         self._prefix = prefix
+        self._summaries_ttl = int(summaries_ttl_sec)
+
+        self._hpatch = self._redis.register_script(self._LUA_HPATCH)
+        self._meta_adapter = TypeAdapter(InstanceMeta)
 
     @classmethod
     def from_config(cls, cfg: StoreConfig) -> "KeyValueStore":
@@ -95,111 +95,113 @@ class KeyValueStore:
             ssl=cfg.ssl,
             decode_responses=cfg.decode_responses,
         )
-        return cls(client=client, prefix=cfg.prefix)
+        return cls(client=client, prefix=cfg.prefix, summaries_ttl_sec=cfg.summaries_ttl_sec)
 
     # ----------------------------
     # Key helpers
     # ----------------------------
     def _k(self, key: str) -> str:
-        """Apply store prefix namespace."""
         return f"{self._prefix}:{key}"
 
-    def key_start_params(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:start_params")
+    def key_instance_meta(self, instance_name: str) -> str:
+        return self._k(f"instance:{instance_name}:meta")
 
-    def key_runtime_state(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:runtime_state")
+    def key_session_summary(self, instance_name: str) -> str:
+        return self._k(f"instance:{instance_name}:session_summary")
 
-    # ----------------------------
-    # Low-level helpers
-    # ----------------------------
-    def delete(self, key: str) -> int:
-        return int(self._redis.delete(key))
-
-    def get_raw(self, key: str) -> Optional[str]:
-        return self._redis.get(key)
-
-    def set_raw(self, key: str, value: str) -> None:
-        self._redis.set(key, value)
+    def key_stream_summary(self, instance_name: str) -> str:
+        return self._k(f"instance:{instance_name}:stream_summary")
 
     # ----------------------------
-    # JSON dict helpers
+    # Instance Meta (HASH)
     # ----------------------------
-    def set_json(self, key: str, value: dict[str, Any]) -> None:
-        self._redis.set(key, json.dumps(value))
-
-    def get_json(self, key: str) -> Optional[dict[str, Any]]:
-        raw = self._redis.get(key)
+    def load_instance_meta(self, instance_name: str) -> InstanceMeta:
+        key = self.key_instance_meta(instance_name)
+        raw = self._redis.hgetall(key)  # dict[str,str]
         if not raw:
-            return None
-        return json.loads(raw)
+            return InstanceMeta(name=instance_name)
+
+        data = self._decode_hash(raw)
+        data.setdefault("name", instance_name)
+        return self._meta_adapter.validate_python(data)
+
+    def update_instance_meta(self, instance_name: str, patch: dict[str, Any]) -> InstanceMeta:
+        key = self.key_instance_meta(instance_name)
+        patch = dict(patch)
+        patch.setdefault("name", instance_name)
+
+        mapping, dels = self._encode_patch(patch)
+        self._hpatch(keys=[key], args=[json.dumps(mapping), json.dumps(dels)])
+
+        return self.load_instance_meta(instance_name)
+
+    def save_instance_meta(self, meta: InstanceMeta) -> None:
+        # overwrite = just patch all non-none fields
+        data = self._meta_adapter.dump_python(meta, exclude_none=True)
+        self.update_instance_meta(meta.name, data)
 
     # ----------------------------
-    # Typed Pydantic helpers
+    # Summaries with TTL (separate keys)
     # ----------------------------
-    def save_model(self, key: str, model: BaseModel) -> None:
-        """Store a pydantic model as JSON string."""
-        self._redis.set(key, model.model_dump_json())
+    def set_session_summary(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
+        key = self.key_session_summary(instance_name)
+        self._redis.set(key, json.dumps(summary, ensure_ascii=False), ex=int(ex or self._summaries_ttl))
 
-    def load_model(self, key: str, model_cls: Type[T], default: T) -> T:
-        """Load a pydantic model from JSON; fallback to default on missing/invalid."""
-        raw = self._redis.get(key)
-        if not raw:
-            return default
-        try:
-            return model_cls.model_validate_json(raw)
-        except Exception:
-            return default
+    def get_session_summary(self, instance_name: str) -> Optional[dict[str, Any]]:
+        raw = self._redis.get(self.key_session_summary(instance_name))
+        return json.loads(raw) if raw else None
 
-    # ----------------------------
-    # Domain: start_params (legacy dict API)
-    # ----------------------------
-    def save_start_params(self, instance_name: str, start_params: dict[str, Any]) -> None:
-        key = self.key_start_params(instance_name)
-        self.set_json(key, start_params)
+    def set_stream_summary(self, instance_name: str, summary: dict[str, Any], *, ex: Optional[int] = None) -> None:
+        key = self.key_stream_summary(instance_name)
+        self._redis.set(key, json.dumps(summary, ensure_ascii=False), ex=int(ex or self._summaries_ttl))
 
-    def load_start_params(self, instance_name: str, default: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-        key = self.key_start_params(instance_name)
-        data = self.get_json(key)
-        if data is None or not isinstance(data, dict):
-            return default or {}
-        return data
+    def get_stream_summary(self, instance_name: str) -> Optional[dict[str, Any]]:
+        raw = self._redis.get(self.key_stream_summary(instance_name))
+        return json.loads(raw) if raw else None
 
     # ----------------------------
-    # Domain: runtime_state (legacy dict API)
+    # Internal encode/decode
     # ----------------------------
-    def save_runtime_state(self, instance_name: str, state: dict[str, Any]) -> None:
-        key = self.key_runtime_state(instance_name)
-        self.set_json(key, state)
+    def _encode_patch(self, patch: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
+        mapping: dict[str, str] = {}
+        dels: list[str] = []
 
-    def load_runtime_state(self, instance_name: str, default: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-        key = self.key_runtime_state(instance_name)
-        data = self.get_json(key)
-        if data is None or not isinstance(data, dict):
-            return default or {}
-        return data
+        for k, v in patch.items():
+            if v is None:
+                dels.append(k)
+                continue
 
-    def update_runtime_state(self, instance_name: str, patch: dict[str, Any]) -> dict[str, Any]:
-        current = self.load_runtime_state(instance_name, default={})
-        updated = {**current, **patch}
-        self.save_runtime_state(instance_name, updated)
-        return updated
+            # Enums like InstanceStatus
+            if hasattr(v, "value") and isinstance(getattr(v, "value"), str):
+                mapping[k] = v.value
+                continue
 
-    # ----------------------------
-    # NEW: cache keys for session-info
-    # ----------------------------
-    def key_session_info_cache(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:session_info_cache")
+            if k in self._JSON_FIELDS and isinstance(v, (dict, list)):
+                mapping[k] = json.dumps(v, ensure_ascii=False, separators=(",", ":"))
+                continue
 
-    def key_session_info_meta(self, instance_name: str) -> str:
-        return self._k(f"instance:{instance_name}:session_info_meta")
+            if isinstance(v, (dict, list)):
+                mapping[k] = json.dumps(v, ensure_ascii=False, separators=(",", ":"))
+                continue
 
-    # ----------------------------
-    # NEW: JSON helpers with TTL
-    # ----------------------------
-    def set_json_ex(self, key: str, value: dict[str, Any], ex: int) -> None:
-        """Set JSON with TTL (seconds)."""
-        self._redis.set(key, json.dumps(value, ensure_ascii=False), ex=int(ex))
+            mapping[k] = str(v)
 
-    def set_raw_ex(self, key: str, value: str, ex: int) -> None:
-        self._redis.set(key, value, ex=int(ex))
+        return mapping, dels
+
+    def _decode_hash(self, raw: Dict[str, str]) -> dict[str, Any]:
+        out: dict[str, Any] = dict(raw)
+
+        for k in list(out.keys()):
+            v = out[k]
+            if k in self._INT_FIELDS:
+                try:
+                    out[k] = int(v)
+                except Exception:
+                    pass
+            elif k in self._JSON_FIELDS:
+                try:
+                    out[k] = json.loads(v)
+                except Exception:
+                    pass
+
+        return out

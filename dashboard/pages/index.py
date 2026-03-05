@@ -4,7 +4,7 @@ import inspect
 from dashboard.state.auth import AuthState
 from dashboard.components.ui.button import ui_button
 from dashboard.components.ui.alerts import info
-from dashboard.components.dashboard.layout import app_layout
+from dashboard.components.dashboard.layout import app_layout, page_layout
 from dashboard.components.dashboard.header import dashboard_header
 from dashboard.components.tools.monaco_editor import MonacoEditor
 from dashboard.state.instances import InstancesState
@@ -19,7 +19,7 @@ def index() -> rx.Component:
 
 
 def _dashboard() -> rx.Component:
-    return app_layout(
+    return page_layout(
         dashboard_header(
             breadcrumbs_items=[
                 rx.link("Home", href="/", size="4"),
@@ -45,7 +45,8 @@ def _dashboard() -> rx.Component:
             width="100%",
             overflow_x="auto",
         ),
-
+        size="4",
+        max_width="1600px",
     )
 
 def _header_cell(text: str, icon: str) -> rx.Component:

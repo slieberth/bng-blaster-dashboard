@@ -312,13 +312,13 @@ class BngBlasterControllerClient:
 
     async def instance_command(
         self,
-        instance_id: str,
+        instance_name: str,
         command: str,
         arguments: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Send a controller '_command' to an instance."""
         arguments = arguments or {}
-        path = f"/api/v1/instances/{instance_id}/_command"
+        path = f"/api/v1/instances/{instance_name}/_command"
         payload = {"command": command, "arguments": arguments}
         # log.debug(f"Sending instance command: {payload} to {path}")
         resp = await self._request("POST", path, json_body=payload)
@@ -331,7 +331,7 @@ class BngBlasterControllerClient:
 
     async def instance_command_with_retries(
         self,
-        instance_id: str,
+        instance_name: str,
         command: str,
         arguments: dict[str, Any] | None = None,
         *,
@@ -344,7 +344,7 @@ class BngBlasterControllerClient:
 
         """Send a controller '_command' to an instance."""
         arguments = arguments or {}
-        path = f"/api/v1/instances/{instance_id}/_command"
+        path = f"/api/v1/instances/{instance_name}/_command"
         payload = {"command": command, "arguments": arguments}
 
         last_error: Exception | None = None

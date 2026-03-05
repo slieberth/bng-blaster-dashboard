@@ -67,6 +67,9 @@ export REFLEX_FRONTEND_PORT="5712"
 export REFLEX_BACKEND_PORT="5713"
 export API_URL="http://127.0.0.1:${REFLEX_BACKEND_PORT}"  # optional
 
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
+export GRANIAN_LOG_LEVEL="${GRANIAN_LOG_LEVEL:-info}"  # optional
+
 if command -v reflex >/dev/null 2>&1; then
   if [ -d "$REFLEX_APP_DIR" ]; then
     cd "$REFLEX_APP_DIR"
@@ -91,8 +94,21 @@ else
 fi
 
 # ------------------------------------------------------------
-# Graceful shutdown
+# Start background worker (separate process)
 # ------------------------------------------------------------
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
+export BNG_CONTROLLER_BASE_URL="${BNG_CONTROLLER_BASE_URL:-http://127.0.0.1:5711}"
+
+WORKER_LOGFILE="/tmp/instance_watcher.log"
+WORKER_PID=""
+
+echo "[entrypoint] Starting instance watcher worker ..."
+# python3 -m dashboard.worker.bg_worker >>"$WORKER_LOGFILE" 2>&1 &
+python3 -m dashboard.worker.instance_watcher >>"$WORKER_LOGFILE" 2>&1 &
+WORKER_PID="$!"
+
+
+
 term_handler() {
   echo "[entrypoint] Caught termination signal"
 
@@ -108,43 +124,90 @@ term_handler() {
     wait "${BNG_CTRL_PID}" || true
   fi
 
+  if [ -n "${WORKER_PID}" ] && kill -0 "${WORKER_PID}" 2>/dev/null; then
+    echo "[entrypoint] Stopping worker (PID ${WORKER_PID})"
+    kill "${WORKER_PID}" || true
+    wait "${WORKER_PID}" || true
+  fi
+  
   exit 0
 }
 
 trap term_handler SIGTERM SIGINT
 
 # ------------------------------------------------------------
+# Wait for controller to be ready, then create instance
+# ------------------------------------------------------------
+echo "[entrypoint] waiting for controller on :${BNG_CTRL_PORT} ..."
+for i in {1..60}; do
+  if curl -sf "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances" >/dev/null 2>&1; then
+    echo "[entrypoint] controller is ready"
+    break
+  fi
+  sleep 0.5
+done
+
+# Only try to create the instance if controller is reachable
+if curl -sf "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances" >/dev/null 2>&1; then
+  echo "[entrypoint] creating quickstart_pppoe instance..."
+  curl -sS \
+    -X PUT \
+    "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances/quickstart_pppoe" \
+    -H "Content-Type: application/json" \
+    --data-binary @- <<'JSON' || true
+{
+    "interfaces": {
+        "a10nsp": [
+            {
+                "__comment__": "PPPoE Server",
+                "interface": "veth1.1"
+            }
+        ],
+        "access": [
+            {
+                "__comment__": "PPPoE Client",
+                "interface": "veth1.2",
+                "type": "pppoe",
+                "outer-vlan-min": 1,
+                "outer-vlan-max": 4000,
+                "inner-vlan": 7,
+                "stream-group-id": 1
+            }
+        ]
+    },
+    "pppoe": {
+        "reconnect": true
+    },
+    "dhcpv6": {
+        "enable": false
+    },
+    "session-traffic": {
+        "ipv4-pps": 1
+    },
+    "streams": [
+        {
+            "stream-group-id": 1,
+            "name": "S1",
+            "type": "ipv4",
+            "direction": "both",
+            "priority": 128,
+            "length": 256,
+            "pps": 1,
+            "a10nsp-interface": "veth1.1"
+        }
+    ],
+    "sessions": {
+        "count": 100
+    }
+}
+JSON
+else
+  echo "[entrypoint] WARNING: controller not reachable, skipping instance creation"
+fi
+
+# ------------------------------------------------------------
 # Keep container alive (and forward signals)
 # ------------------------------------------------------------
 
-curl -v \
-  -X PUT \
-  "http://127.0.0.1:5711/api/v1/instances/quickstart_pppoe" \
-  -H "Content-Type: application/json" \
-  --data-binary @- <<'JSON'
-{
-  "interfaces": {
-    "a10nsp": [
-      {
-        "__comment__": "PPPoE Server",
-        "interface": "veth1.1"
-      }
-    ],
-    "access": [
-      {
-        "__comment__": "PPPoE Client",
-        "interface": "veth1.2",
-        "type": "pppoe",
-        "outer-vlan-min": 1,
-        "outer-vlan-max": 4000,
-        "inner-vlan": 7
-      }
-    ]
-  }
-}
-JSON
-
-
-  
 sleep infinity &
 wait $!
