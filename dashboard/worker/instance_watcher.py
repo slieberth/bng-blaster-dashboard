@@ -89,7 +89,6 @@ async def run_forever(stop_event: asyncio.Event) -> None:
                             name,
                             "session-counters",
                             {})
-                        # logger.info("!!! instance=%s session_counters=%s", name, session_counters)
                         counters = SessionCounters.model_validate(session_counters["session-counters"])
                         store.set_session_counters(
                             name,
@@ -103,7 +102,7 @@ async def run_forever(stop_event: asyncio.Event) -> None:
                             name,
                             "stream-stats",
                             {})
-                        logger.info("!!! instance=%s stream_stats=%s", name, stream_stats)
+
                         counters = StreamStats.model_validate(stream_stats["stream-stats"])
                         store.set_stream_stats(
                             name,

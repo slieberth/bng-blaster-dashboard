@@ -8,8 +8,6 @@ from dashboard.pages import login  # noqa: F401
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-logger.info("!!! App !!!")
-
 app = rx.App()
 
 

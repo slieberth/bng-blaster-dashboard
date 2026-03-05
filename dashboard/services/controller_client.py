@@ -189,7 +189,7 @@ class BngBlasterControllerClient:
         try:
             resp = await self._request("GET", url_base)
             data = resp.json()
-            log.info("!!! get_instance_status for %s: %s", instance_name, data)
+
 
             status = data.get("status")
             return str(status or "")
