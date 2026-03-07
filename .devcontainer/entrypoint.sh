@@ -123,12 +123,6 @@ term_handler() {
     kill "${BNG_CTRL_PID}" || true
     wait "${BNG_CTRL_PID}" || true
   fi
-
-  if [ -n "${WORKER_PID}" ] && kill -0 "${WORKER_PID}" 2>/dev/null; then
-    echo "[entrypoint] Stopping worker (PID ${WORKER_PID})"
-    kill "${WORKER_PID}" || true
-    wait "${WORKER_PID}" || true
-  fi
   
   exit 0
 }
