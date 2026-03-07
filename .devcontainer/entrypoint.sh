@@ -99,13 +99,13 @@ fi
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 export BNG_CONTROLLER_BASE_URL="${BNG_CONTROLLER_BASE_URL:-http://127.0.0.1:5711}"
 
-WORKER_LOGFILE="/tmp/instance_watcher.log"
-WORKER_PID=""
+# WORKER_LOGFILE="/tmp/instance_watcher.log"
+# WORKER_PID=""
 
-echo "[entrypoint] Starting instance watcher worker ..."
-# python3 -m dashboard.worker.bg_worker >>"$WORKER_LOGFILE" 2>&1 &
-python3 -m dashboard.worker.instance_watcher >>"$WORKER_LOGFILE" 2>&1 &
-WORKER_PID="$!"
+# echo "[entrypoint] Starting instance watcher worker ..."
+# # python3 -m dashboard.worker.bg_worker >>"$WORKER_LOGFILE" 2>&1 &
+# python3 -m dashboard.worker.instance_watcher >>"$WORKER_LOGFILE" 2>&1 &
+# WORKER_PID="$!"
 
 
 
