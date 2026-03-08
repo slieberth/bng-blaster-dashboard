@@ -14,7 +14,7 @@ logger = logging.getLogger("dashboard.pages.instance_dashboard")
 @rx.page(
     route="/instance_dashboard",
     title="Instance Dashboard",
-    on_load=InstanceDashboard.on_load,
+    on_load=InstanceDashboard.background_refresh,
 )
 
 def instance_dashboard() -> rx.Component:
@@ -22,10 +22,10 @@ def instance_dashboard() -> rx.Component:
         page_layout(
             dashboard_header(
                 breadcrumbs_items=[
-                    rx.link("Home", href="/", size="2"),
+                    rx.link("Home", href="/", size="3"),
                     rx.text(
                         InstanceDashboard.instance_name,
-                        size="2",
+                        size="3",
                         color=rx.color("gray", 12),
                         weight="bold",
                     ),

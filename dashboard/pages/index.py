@@ -23,7 +23,7 @@ def _dashboard() -> rx.Component:
         page_layout(
             dashboard_header(
                 breadcrumbs_items=[
-                    rx.link("Home", href="/", size="2"),
+                    rx.link("Home", href="/", size="3"),
                 ],
                 actions=rx.hstack(
                     ui_button(
@@ -171,7 +171,6 @@ def _show_item(item: InstanceRow, index: int) -> rx.Component:
                                 disabled=item.status == "stopped",
                                 size="1",
                             ),
-                            # href=f"/instance_dashboard/{item.name}?instance_name={item.name}",
                             href=f"/instance_dashboard?instance_name={item.name}",
                         ),
                         content="Open instance dashboard",
