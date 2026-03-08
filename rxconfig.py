@@ -4,7 +4,7 @@ from reflex.constants import LogLevel
 config = rx.Config(
     app_name="dashboard",
 
-    loglevel=LogLevel.DEBUG,
+    loglevel=LogLevel.INFO,
     
     # Frontend
     frontend_port=5712,

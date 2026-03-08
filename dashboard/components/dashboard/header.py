@@ -6,7 +6,7 @@ def breadcrumbs(items: list[rx.Component]) -> rx.Component:
     for i, comp in enumerate(items):
         out.append(comp)
         if i < len(items) - 1:
-            out.append(rx.text("/", color=rx.color("gray", 9)))
+            out.append(rx.text("/", color=rx.color("gray", 2)))
     return rx.hstack(*out, spacing="2", align="center")
 
 

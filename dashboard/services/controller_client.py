@@ -55,28 +55,16 @@ class BngBlasterControllerClient:
         """
         async def on_request(request: httpx.Request) -> None:
             rid = request.extensions.get("rid", "-")
-            log.debug("[rid=%s] --> %s %s", rid, request.method, request.url)
-            # Log small JSON payload preview if present
             if request.content:
                 # content may be bytes; try decode
                 try:
                     body = request.content.decode("utf-8", errors="replace")  # type: ignore[attr-defined]
                 except Exception:
                     body = str(request.content)
-                # log.debug("[rid=%s] request body=%s", rid, _preview_text(body, 800))
 
         async def on_response(response: httpx.Response) -> None:
             rid = response.request.extensions.get("rid", "-")
             elapsed_ms = response.extensions.get("elapsed_ms", None)
-            log.debug(
-                "[rid=%s] <-- %s %s (%s) %s",
-                rid,
-                response.request.method,
-                response.request.url,
-                response.status_code,
-                f"{elapsed_ms}ms" if elapsed_ms is not None else "",
-            )
-            log.debug("[rid=%s] response body=%s", rid, _safe_json_preview(response))
 
         return httpx.AsyncClient(
             timeout=self.timeout,
@@ -101,9 +89,6 @@ class BngBlasterControllerClient:
             try:
                 req = client.build_request(method, url, json=json_body)
                 req.extensions["rid"] = rid
-                log.info("[rid=%s] Sending %s request to %s", rid, method, url)
-                if json_body:
-                    log.info("[rid=%s] Request body: %s", rid, _preview_text(json.dumps(json_body)))
                 resp = await client.send(req)
                 resp.extensions["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
 
@@ -203,22 +188,17 @@ class BngBlasterControllerClient:
         start_params: dict[str, Any],
     ) -> dict[str, Any]:
         url_base = f"/api/v1/instances/{instance_name}"
-        log.debug("Starting instance %s with params: %s", instance_name, start_params)
         try:
             resp = await self._request("GET", url_base)
-            log.debug("get_instance_status for %s: %s", instance_name, resp.json())
             status = resp.json().get("status")
-            log.debug("pre-check status for %s: %s", instance_name, status)
             if status == "started":
-                log.debug("instance %s already started -> stopping first", instance_name)
+                log.warning("instance %s already started -> stopping first", instance_name)
                 await self.stop_instance(instance_name)
         except Exception as exc:
             log.warning("pre-check failed for %s (ignored): %s", instance_name, exc)
 
-        # Start
         await self._request("POST", f"{url_base}/_start", json_body=start_params)
 
-        # Read back
         resp = await self._request("GET", url_base)
         data = resp.json()
         if not isinstance(data, dict):
@@ -242,35 +222,20 @@ class BngBlasterControllerClient:
         using an incremental backoff polling logic.
         """
         url_base = f"/api/v1/instances/{instance_name}"
-
-        # 1. Send the stop command
         await self._request("POST", f"{url_base}/_stop")
-
-        # 2. Initial wait (corresponds to time.sleep(1) in Robot)
         await asyncio.sleep(1)
-
         counter = 0
         while counter < 5:
-            # 3. Fetch current status
             resp = await self._request("GET", url_base)
             data = resp.json()
-            
             if not isinstance(data, dict):
                 raise RuntimeError(f"Unexpected status payload type: {type(data)}")
-
             status = data.get("status")
-
-            # 4. Check if stopped
             if status == "stopped":
-                return data
-            
+                return data       
             # 5. Incremental backoff: 1s, 3s, 5s, 7s, 9s
             wait_time = counter * 2 + 1
-            counter += 1
-            
-            # Optional: Log the status and wait time here
-            # print(f"Instance {instance_name} is still {status}, waiting {wait_time}s...")
-            
+            counter += 1            
             await asyncio.sleep(wait_time)
 
         # 6. Fallback if not stopped after 5 retries
@@ -320,7 +285,6 @@ class BngBlasterControllerClient:
         arguments = arguments or {}
         path = f"/api/v1/instances/{instance_name}/_command"
         payload = {"command": command, "arguments": arguments}
-        # log.debug(f"Sending instance command: {payload} to {path}")
         resp = await self._request("POST", path, json_body=payload)
 
         data = resp.json()
@@ -353,7 +317,6 @@ class BngBlasterControllerClient:
             try:
                 resp = await self._request("POST", path, json_body=payload)
 
-                # Wenn _request NICHT raise_for_status macht:
                 status = getattr(resp, "status_code", None)
                 if status in RETRY_STATUS and attempt < retries:
                     delay = min(max_delay, base_delay * (2 ** attempt))
@@ -361,17 +324,12 @@ class BngBlasterControllerClient:
                     await asyncio.sleep(delay)
                     continue
 
-                # Wenn _request raise_for_status macht, kommst du bei 5xx hier gar nicht hin.
                 data = resp.json()
                 if not isinstance(data, dict):
                     raise RuntimeError(f"Unexpected instance_command payload type: {type(data)}")
-                
-                log.info(f"instance_command '{command}' \ndata: \n{data} \n(attempt {attempt+1})")
                 return data
 
             except Exception as e:
-                # Wenn _request bei 5xx schon Exception wirft, landen wir hier.
-                # Versuche Statuscode herauszulesen (httpx/requests-like)
                 status = getattr(e, "status_code", None)
                 if status is None and hasattr(e, "response") and e.response is not None:
                     status = getattr(e.response, "status_code", None)
