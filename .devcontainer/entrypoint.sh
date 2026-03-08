@@ -19,7 +19,15 @@ echo "[entrypoint] redis is ready"
 if ip link add veth1.1 type veth peer name veth1.2 2>/dev/null; then
     ip link set veth1.1 up
     ip link set veth1.2 up
-    echo "[entrypoint] veth interfaces ready"
+    echo "[entrypoint] veth 1 + 2 interfaces ready"
+else
+    echo "[entrypoint] WARNING: cannot create veth interfaces (missing NET_ADMIN?)"
+fi
+
+if ip link add veth1.3 type veth peer name veth1.4 2>/dev/null; then
+    ip link set veth1.3 up
+    ip link set veth1.4 up
+    echo "[entrypoint] veth 3 + 4 interfaces ready"
 else
     echo "[entrypoint] WARNING: cannot create veth interfaces (missing NET_ADMIN?)"
 fi
@@ -144,9 +152,10 @@ done
 # Only try to create the instance if controller is reachable
 if curl -sf "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances" >/dev/null 2>&1; then
   echo "[entrypoint] creating quickstart_pppoe instance..."
+
   curl -sS \
     -X PUT \
-    "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances/quickstart_pppoe" \
+    "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances/quickstart_pppoe_1" \
     -H "Content-Type: application/json" \
     --data-binary @- <<'JSON' || true
 {
@@ -191,6 +200,112 @@ if curl -sf "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances" >/dev/null 2>&1
         }
     ],
     "sessions": {
+        "count": 1
+    }
+}
+JSON
+
+
+  curl -sS \
+    -X PUT \
+    "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances/quickstart_pppoe_10" \
+    -H "Content-Type: application/json" \
+    --data-binary @- <<'JSON' || true
+{
+    "interfaces": {
+        "a10nsp": [
+            {
+                "__comment__": "PPPoE Server",
+                "interface": "veth1.1"
+            }
+        ],
+        "access": [
+            {
+                "__comment__": "PPPoE Client",
+                "interface": "veth1.2",
+                "type": "pppoe",
+                "outer-vlan-min": 1,
+                "outer-vlan-max": 4000,
+                "inner-vlan": 7,
+                "stream-group-id": 1
+            }
+        ]
+    },
+    "pppoe": {
+        "reconnect": true
+    },
+    "dhcpv6": {
+        "enable": false
+    },
+    "session-traffic": {
+        "ipv4-pps": 1
+    },
+    "streams": [
+        {
+            "stream-group-id": 1,
+            "name": "S1",
+            "type": "ipv4",
+            "direction": "both",
+            "priority": 128,
+            "length": 256,
+            "pps": 1,
+            "a10nsp-interface": "veth1.1"
+        }
+    ],
+    "sessions": {
+        "count": 10
+    }
+}
+JSON
+
+
+  curl -sS \
+    -X PUT \
+    "http://127.0.0.1:${BNG_CTRL_PORT}/api/v1/instances/quickstart_pppoe_100" \
+    -H "Content-Type: application/json" \
+    --data-binary @- <<'JSON' || true
+{
+    "interfaces": {
+        "a10nsp": [
+            {
+                "__comment__": "PPPoE Server",
+                "interface": "veth1.3"
+            }
+        ],
+        "access": [
+            {
+                "__comment__": "PPPoE Client",
+                "interface": "veth1.4",
+                "type": "pppoe",
+                "outer-vlan-min": 1,
+                "outer-vlan-max": 4000,
+                "inner-vlan": 7,
+                "stream-group-id": 1
+            }
+        ]
+    },
+    "pppoe": {
+        "reconnect": true
+    },
+    "dhcpv6": {
+        "enable": false
+    },
+    "session-traffic": {
+        "ipv4-pps": 1
+    },
+    "streams": [
+        {
+            "stream-group-id": 1,
+            "name": "S1",
+            "type": "ipv4",
+            "direction": "both",
+            "priority": 128,
+            "length": 256,
+            "pps": 1,
+            "a10nsp-interface": "veth1.3"
+        }
+    ],
+    "sessions": {
         "count": 100
     }
 }
@@ -198,7 +313,6 @@ JSON
 else
   echo "[entrypoint] WARNING: controller not reachable, skipping instance creation"
 fi
-
 # ------------------------------------------------------------
 # Keep container alive (and forward signals)
 # ------------------------------------------------------------

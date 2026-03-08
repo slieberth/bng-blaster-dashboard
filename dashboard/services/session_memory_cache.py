@@ -8,10 +8,12 @@ from typing import Any
 import httpx
 
 from dashboard.services.controller_client import BngBlasterControllerClient
+from dashboard.models.bbl_models import SessionCounters
+from dashboard.models.bbl_models import SessionInfo
 
 log = logging.getLogger("dashboard.session_memory_cache")
 
-DEFAULT_CACHE_SECONDS = 10
+DEFAULT_CACHE_SECONDS = 5
 DEFAULT_CONCURRENCY = 3
 DEFAULT_CHUNK_SIZE = 50
 
@@ -19,7 +21,7 @@ DEFAULT_CHUNK_SIZE = 50
 # {
 #   "instance_name": {
 #       "ts": 1234567890.0,
-#       "sessions": [ {...}, {...} ]
+#       "sessions": list[SessionInfo],
 #   }
 # }
 _MEMORY_CACHE: dict[str, dict[str, Any]] = {}
@@ -51,8 +53,8 @@ async def _fetch_one_session_info(
     instance_name: str,
     sid: int,
     sem: asyncio.Semaphore,
-) -> dict[str, Any] | None:
-    """Fetch one session-info record with retries."""
+) -> SessionInfo | None:
+    """Fetch and validate one session-info record with retries."""
     max_retries = 3
     backoff_s = [0.05, 0.15, 0.35]
 
@@ -76,7 +78,7 @@ async def _fetch_one_session_info(
                 if code in (400, 404):
                     return None
 
-                # Controller temporary error
+                # Temporary controller error
                 if code == 500 and "not able to send command" in (body_text or ""):
                     if attempt < max_retries:
                         await asyncio.sleep(backoff_s[min(attempt, len(backoff_s) - 1)])
@@ -86,13 +88,34 @@ async def _fetch_one_session_info(
                 raise
 
         raw = resp.get("session-info") if isinstance(resp, dict) else None
+
+        # Controller may return either a dict or a list with one dict
+        candidate: dict[str, Any] | None = None
         if isinstance(raw, dict):
-            return raw
-        if isinstance(raw, list):
+            candidate = raw
+        elif isinstance(raw, list):
             for item in raw:
                 if isinstance(item, dict):
-                    return item
-        return None
+                    candidate = item
+                    break
+
+        if not isinstance(candidate, dict):
+            return None
+
+        try:
+            model = SessionInfo.model_validate(candidate)
+        except Exception:
+            log.exception(
+                "Failed to validate session-info for instance=%s session-id=%s",
+                instance_name,
+                sid,
+            )
+            return None
+
+        if model.session_id != sid:
+            return None
+
+        return model
 
     return None
 
@@ -102,20 +125,27 @@ async def _load_sessions_from_controller(
     *,
     concurrency: int = DEFAULT_CONCURRENCY,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-) -> list[dict[str, Any]]:
+) -> list[SessionInfo]:
     """Load all sessions for one instance from the controller."""
     client = BngBlasterControllerClient()
     name = _norm(instance_name)
 
-    counters_resp = await client.instance_command_with_retries(name, "session-counters", {})
-    counters = counters_resp.get("session-counters") if isinstance(counters_resp, dict) else None
+    counters_resp = await client.instance_command_with_retries(
+        name,
+        "session-counters",
+        {},
+    )
 
-    total = 0
-    if isinstance(counters, dict):
-        try:
-            total = int(counters.get("sessions") or 0)
-        except Exception:
-            total = 0
+    counters_raw = counters_resp.get("session-counters") if isinstance(counters_resp, dict) else None
+    if not isinstance(counters_raw, dict):
+        return []
+
+    try:
+        counters = SessionCounters.model_validate(counters_raw)
+        total = int(counters.sessions)
+    except Exception:
+        log.exception("Failed to validate session-counters for instance=%s", name)
+        total = 0
 
     if total <= 0:
         return []
@@ -123,7 +153,7 @@ async def _load_sessions_from_controller(
     sem = asyncio.Semaphore(max(1, int(concurrency)))
     chunk_size = max(1, int(chunk_size))
 
-    sessions_by_id: dict[int, dict[str, Any]] = {}
+    sessions_by_id: dict[int, SessionInfo] = {}
 
     for start in range(1, total + 1, chunk_size):
         end = min(total, start + chunk_size - 1)
@@ -133,16 +163,15 @@ async def _load_sessions_from_controller(
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for sid_req, result in zip(ids, results):
-            if isinstance(result, Exception) or result is None or not isinstance(result, dict):
+            if isinstance(result, Exception) or result is None:
                 continue
 
-            sid_val = _coerce_int(result.get("session-id"))
-            if sid_val is None or sid_val != sid_req:
+            if result.session_id != sid_req:
                 continue
 
+            log.debug("Loaded session-id=%d for instance=%s", sid_req, name)
             sessions_by_id[sid_req] = result
 
-    # Return as sorted list
     return [sessions_by_id[sid] for sid in sorted(sessions_by_id.keys())]
 
 
@@ -153,9 +182,9 @@ async def get_instance_sessions(
     force_refresh: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-) -> list[dict[str, Any]]:
+) -> list[SessionInfo]:
     """
-    Return all sessions for one instance as a list.
+    Return all sessions for one instance as a typed list.
 
     The result is cached in memory for `cache_seconds`.
     Use `force_refresh=True` to bypass the cache.
@@ -186,6 +215,30 @@ async def get_instance_sessions(
 
     log.info("Loaded %d sessions for instance=%s", len(sessions), name)
     return sessions
+
+
+async def get_instance_sessions_as_dicts(
+    instance_name: str,
+    *,
+    cache_seconds: int = DEFAULT_CACHE_SECONDS,
+    force_refresh: bool = False,
+    concurrency: int = DEFAULT_CONCURRENCY,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    by_alias: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Return all sessions as plain dicts.
+
+    This is useful for UI layers that still expect dictionaries.
+    """
+    sessions = await get_instance_sessions(
+        instance_name,
+        cache_seconds=cache_seconds,
+        force_refresh=force_refresh,
+        concurrency=concurrency,
+        chunk_size=chunk_size,
+    )
+    return [session.model_dump(by_alias=by_alias) for session in sessions]
 
 
 async def invalidate_instance_sessions(instance_name: str) -> None:

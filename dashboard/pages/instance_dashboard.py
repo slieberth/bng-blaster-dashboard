@@ -62,19 +62,6 @@ def instance_dashboard() -> rx.Component:
 def _counters_view() -> rx.Component:
     return rx.box(
         rx.vstack(
-            rx.hstack(
-                rx.heading("Session Counters", size="6"),
-                rx.spacer(),
-                rx.text(InstanceDashboard.session_counters_status, color=rx.color("gray", 11)),
-                ui_button(
-                    "Refresh",
-                    icon="refresh-cw",
-                    on_click=InstanceDashboard.refresh_session_counters,
-                    size="1",
-                ),
-                width="100%",
-                align="center",
-            ),
             rx.cond(
                 InstanceDashboard.session_counters_is_not_running,
                 rx.callout(
@@ -115,19 +102,19 @@ def _counters_view() -> rx.Component:
 def _session_info_view() -> rx.Component:
     return rx.box(
         rx.vstack(
-            rx.hstack(
-                rx.heading("Session Info", size="6"),
-                rx.spacer(),
-                rx.text(InstanceDashboard.session_info_status, color=rx.color("gray", 11)),
-                ui_button(
-                    "Refresh view",
-                    icon="refresh-cw",
-                    on_click=InstanceDashboard.refresh_session_infos,
-                    size="1",
-                ),
-                width="100%",
-                align="center",
-            ),
+            # rx.hstack(
+            #     rx.heading("Session Info", size="6"),
+            #     rx.spacer(),
+            #     rx.text(InstanceDashboard.session_info_status, color=rx.color("gray", 11)),
+            #     ui_button(
+            #         "Refresh view",
+            #         icon="refresh-cw",
+            #         on_click=InstanceDashboard.refresh_session_infos,
+            #         size="1",
+            #     ),
+            #     width="100%",
+            #     align="center",
+            # ),
             rx.hstack(
                 rx.text("Filtered:", color=rx.color("gray", 11)),
                 rx.text(InstanceDashboard.session_info_filtered_count, color=rx.color("gray", 11)),
@@ -250,3 +237,4 @@ def _logs_view() -> rx.Component:
         padding="4",
         width="100%",
     )
+

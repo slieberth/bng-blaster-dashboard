@@ -74,3 +74,86 @@ class SessionCounters(BaseModel):
 class StreamStats(BaseModel):
     total_flows: int = Field(alias="total-flows")
     verified_flows: int = Field(alias="verified-flows")
+
+class SessionTraffic(BaseModel):
+    total_flows: int = Field(alias="total-flows")
+    verified_flows: int = Field(alias="verified-flows")
+
+    downstream_ipv4_flow_id: Optional[int] = Field(None, alias="downstream-ipv4-flow-id")
+    downstream_ipv4_tx_packets: Optional[int] = Field(None, alias="downstream-ipv4-tx-packets")
+    downstream_ipv4_rx_packets: Optional[int] = Field(None, alias="downstream-ipv4-rx-packets")
+    downstream_ipv4_rx_first_seq: Optional[int] = Field(None, alias="downstream-ipv4-rx-first-seq")
+    downstream_ipv4_loss: Optional[int] = Field(None, alias="downstream-ipv4-loss")
+    downstream_ipv4_wrong_session: Optional[int] = Field(None, alias="downstream-ipv4-wrong-session")
+
+    upstream_ipv4_flow_id: Optional[int] = Field(None, alias="upstream-ipv4-flow-id")
+    upstream_ipv4_tx_packets: Optional[int] = Field(None, alias="upstream-ipv4-tx-packets")
+    upstream_ipv4_rx_packets: Optional[int] = Field(None, alias="upstream-ipv4-rx-packets")
+    upstream_ipv4_rx_first_seq: Optional[int] = Field(None, alias="upstream-ipv4-rx-first-seq")
+    upstream_ipv4_loss: Optional[int] = Field(None, alias="upstream-ipv4-loss")
+    upstream_ipv4_wrong_session: Optional[int] = Field(None, alias="upstream-ipv4-wrong-session")
+
+
+class A10NSPStats(BaseModel):
+    interface: str
+    s_vlan: Optional[int] = Field(None, alias="s-vlan")
+    qinq_send: Optional[bool] = Field(None, alias="qinq-send")
+    qinq_received: Optional[bool] = Field(None, alias="qinq-received")
+
+    tx_packets: Optional[int] = Field(None, alias="tx-packets")
+    rx_packets: Optional[int] = Field(None, alias="rx-packets")
+
+
+class SessionInfo(BaseModel):
+    type: str
+
+    session_id: int = Field(alias="session-id")
+    session_state: str = Field(alias="session-state")
+    session_version: Optional[int] = Field(None, alias="session-version")
+
+    flapped: Optional[int] = None
+    interface: Optional[str] = None
+
+    outer_vlan: Optional[int] = Field(None, alias="outer-vlan")
+    inner_vlan: Optional[int] = Field(None, alias="inner-vlan")
+
+    mac: Optional[str] = None
+    username: Optional[str] = None
+    reply_message: Optional[str] = Field(None, alias="reply-message")
+
+    lcp_state: Optional[str] = Field(None, alias="lcp-state")
+    ipcp_state: Optional[str] = Field(None, alias="ipcp-state")
+    ip6cp_state: Optional[str] = Field(None, alias="ip6cp-state")
+
+    ipv4_address: Optional[str] = Field(None, alias="ipv4-address")
+    ipv4_dns1: Optional[str] = Field(None, alias="ipv4-dns1")
+    ipv4_dns2: Optional[str] = Field(None, alias="ipv4-dns2")
+
+    dhcpv6_state: Optional[str] = Field(None, alias="dhcpv6-state")
+
+    tx_packets: Optional[int] = Field(None, alias="tx-packets")
+    rx_packets: Optional[int] = Field(None, alias="rx-packets")
+    rx_fragmented_packets: Optional[int] = Field(None, alias="rx-fragmented-packets")
+
+    tx_bytes: Optional[int] = Field(None, alias="tx-bytes")
+    rx_bytes: Optional[int] = Field(None, alias="rx-bytes")
+
+    tx_accounting_packets: Optional[int] = Field(None, alias="tx-accounting-packets")
+    rx_accounting_packets: Optional[int] = Field(None, alias="rx-accounting-packets")
+
+    tx_accounting_bytes: Optional[int] = Field(None, alias="tx-accounting-bytes")
+    rx_accounting_bytes: Optional[int] = Field(None, alias="rx-accounting-bytes")
+
+    tx_igmp: Optional[int] = Field(None, alias="tx-igmp")
+    rx_igmp: Optional[int] = Field(None, alias="rx-igmp")
+    rx_igmp_wrong_state: Optional[int] = Field(None, alias="rx-igmp-wrong-state")
+
+    tx_icmp: Optional[int] = Field(None, alias="tx-icmp")
+    rx_icmp: Optional[int] = Field(None, alias="rx-icmp")
+
+    tx_icmpv6: Optional[int] = Field(None, alias="tx-icmpv6")
+    rx_icmpv6: Optional[int] = Field(None, alias="rx-icmpv6")
+
+    session_traffic: Optional[SessionTraffic] = Field(None, alias="session-traffic")
+
+    a10nsp: Optional[A10NSPStats] = None
